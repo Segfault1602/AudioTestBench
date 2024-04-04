@@ -16,7 +16,7 @@
             "console": "externalTerminal"
         },
         {
-            "name": "(Windows) Launch",
+            "name": "Audio testbench (Debug)",
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/src/Debug/audio_testbench.exe",

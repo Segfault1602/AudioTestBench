@@ -68,22 +68,23 @@ if (NOT implot_POPULATED)
     target_include_directories(implot PUBLIC ${IMPLOT_INCLUDE_DIR} ${IMGUI_INCLUDE_DIR})
 endif()
 
-set(EXE_SOURCE
-    main.cpp
-    audio_gui.cpp
-    )
-
 FetchContent_Declare(
     imgui-filebrowser
     GIT_REPOSITORY https://github.com/AirGuanZ/imgui-filebrowser.git
     GIT_TAG master
-)
+    )
 
-FetchContent_GetProperties(imgui-filebrowser)
-if (NOT imgui-filebrowser_POPULATED)
+    FetchContent_GetProperties(imgui-filebrowser)
+    if (NOT imgui-filebrowser_POPULATED)
     FetchContent_Populate(imgui-filebrowser)
     set(IMGUI_FILEBROWSER_INCLUDE_DIR ${imgui-filebrowser_SOURCE_DIR})
-endif()
+    endif()
+
+set(EXE_SOURCE
+    main.cpp
+    audio_gui.cpp
+    plotting_ringbuffer.cpp
+    )
 
 add_executable(${PROJECT_NAME} ${EXE_SOURCE})
 

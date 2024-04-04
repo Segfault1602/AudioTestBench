@@ -10,13 +10,7 @@
 #include <sndfile.h>
 #include <vector>
 
-#include "audio/ring_buffer.h"
-
-namespace
-{
-SF_INFO file_info;
-SNDFILE* file = nullptr;
-} // namespace
+#include "plotting_ringbuffer.h"
 
 void DrawAudioDeviceGui(AudioManager* audio_manager, float rms)
 {
@@ -133,19 +127,6 @@ void DrawAudioDeviceGui(AudioManager* audio_manager, float rms)
     if (ImGui::Checkbox("Play Test Tone", &play_test_tone))
     {
         audio_manager->PlayTestTone(play_test_tone);
-        if (play_test_tone)
-        {
-            file_info.channels = 1;
-            file_info.samplerate = 48000;
-            file_info.format = SF_FORMAT_WAV | SF_FORMAT_FLOAT;
-
-            file = sf_open("test_out.wav", SFM_WRITE, &file_info);
-        }
-        else
-        {
-            sf_close(file);
-            file = nullptr;
-        }
     }
 
     ImGui::ProgressBar(rms, ImVec2(-100.f, 0.f), "");
@@ -156,16 +137,15 @@ void DrawAudioDeviceGui(AudioManager* audio_manager, float rms)
 void DrawWaveformPlot(const float* data, size_t size)
 {
     static bool init = false;
-    static RingBuffer ring_buffer;
-    static std::vector<float> plot_data;
+    static PlotRingBuffer ring_buffer;
     const size_t sample_rate = 48000;
+    constexpr size_t buffer_size = 24000;
 
     if (!init)
     {
         init = true;
         // Plot ~ half a second?
-        ring_buffer.Resize(16384);
-        plot_data.resize(16384);
+        ring_buffer.Resize(buffer_size);
     }
     ImGui::Begin("Scope");
     static bool freeze = false;
@@ -191,38 +171,37 @@ void DrawWaveformPlot(const float* data, size_t size)
         ImGui::EndCombo();
     }
 
-    if (file && size > 0)
-    {
-        size_t write = sf_writef_float(file, data, size);
-    }
-
     if (!freeze && size > 0)
     {
-        size_t available_write = ring_buffer.GetWriteAvailable();
-        if (available_write < size)
+        if (ring_buffer.GetSize() < size)
         {
-            // read the difference
-            size_t read_size = size - available_write;
-            ring_buffer.Read(plot_data.data(), read_size);
+            // Just copy the latest data
+            size_t offset = size - ring_buffer.GetSize();
+            ring_buffer.Write(data + offset, ring_buffer.GetSize());
         }
-
-        available_write = ring_buffer.GetWriteAvailable();
-        assert(available_write >= size);
-        ring_buffer.Write(data, size);
-
-        size_t peek_size = ring_buffer.GetReadAvailable();
-        ring_buffer.Peek(plot_data.data(), peek_size);
+        else
+        {
+            ring_buffer.Write(data, size);
+        }
     }
 
     if (ImPlot::BeginPlot("##Scope", ImVec2(-1, -1)))
     {
         size_t zoom_samples = sample_rate * zoom_level[selected_zoom] / 1000;
-        zoom_samples = min(zoom_samples, plot_data.size());
+        zoom_samples = min(zoom_samples, ring_buffer.GetSize());
 
         ImPlot::SetupAxes("Time", "Signal");
         ImPlot::SetupAxisLimits(ImAxis_X1, 0, zoom_samples, ImGuiCond_Always);
         ImPlot::SetupAxisLimits(ImAxis_Y1, -1, 1);
-        ImPlot::PlotLine("wave", plot_data.data(), zoom_samples);
+        ImPlot::PlotLine("wave",
+                         ring_buffer.GetBuffer(), // value
+                         ring_buffer.GetSize(),   // count
+                         1,                       // xscale
+                         0,                       // xstart
+                         ImPlotLineFlags_None,    // flags
+                         ring_buffer.GetOffset(), // offset
+                         sizeof(float)            // stride
+        );
 
         ImPlot::EndPlot();
     }
