@@ -19,6 +19,23 @@ if (NOT rtaudio_POPULATED)
 endif()
 
 FetchContent_Declare(
+    rtmidi
+    GIT_REPOSITORY https://github.com/thestk/rtmidi.git
+    GIT_TAG 6.0.0
+)
+
+FetchContent_GetProperties(rtmidi)
+if (NOT rtmidi_POPULATED)
+    FetchContent_Populate(rtmidi)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(RTMIDI_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    set(RTMIDI_TARGETNAME_UNINSTALL OFF CACHE BOOL "RTMIDI_UNINSTALL" FORCE)
+
+    add_subdirectory(${rtmidi_SOURCE_DIR} ${rtmidi_BINARY_DIR})
+    # target_compile_definitions(rtmidi PRIVATE -D_CRT_SECURE_NO_WARNINGS)
+endif()
+
+FetchContent_Declare(
     libdsp
     GIT_REPOSITORY https://github.com/Segfault1602/libdsp.git
     GIT_TAG main
@@ -54,20 +71,35 @@ if (NOT libsndfile_POPULATED)
     target_compile_definitions(sndfile PRIVATE -D_CRT_SECURE_NO_WARNINGS)
 endif()
 
+FetchContent_Declare(
+    pffft
+    GIT_REPOSITORY https://bitbucket.org/jpommier/pffft.git
+)
+
+FetchContent_GetProperties(pffft)
+if (NOT pffft_POPULATED)
+    FetchContent_Populate(pffft)
+    add_library(pffft STATIC ${pffft_SOURCE_DIR}/pffft.c)
+    target_compile_definitions(pffft PRIVATE -D_USE_MATH_DEFINES)
+    target_include_directories(pffft PUBLIC ${pffft_SOURCE_DIR})
+endif()
+
 set(AUDIOLIB_SOURCE
     audio.cpp
+    midi_manager.cpp
     rtaudio_impl.cpp
+    rtmidi_impl.cpp
     test_tone.cpp
-    ring_buffer.cpp
     sndfile_manager_impl.cpp
+    fft_utils.cpp
     )
 
 add_library(audiolib STATIC ${AUDIOLIB_SOURCE})
-target_link_libraries(audiolib PRIVATE rtaudio dsp sndfile)
+target_link_libraries(audiolib PRIVATE rtaudio rtmidi dsp sndfile pffft)
 target_include_directories(audiolib PRIVATE ${libdsp_SOURCE_DIR}/include)
 
 
-add_executable(test_buffer test.cpp ring_buffer.cpp)
+add_executable(test_buffer test.cpp)
 target_link_libraries(test_buffer PRIVATE sndfile)
 target_include_directories(test_buffer PRIVATE ${libsndfile_SOURCE_DIR}/include)
 

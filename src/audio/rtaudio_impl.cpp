@@ -143,7 +143,7 @@ void RtAudioManagerImpl::SetInputDevice(std::string_view device_name)
     for (auto device : devices)
     {
         auto info = rtaudio_->getDeviceInfo(device);
-        if (info.name == device_name && device != current_input_device_id_)
+        if (info.name == device_name && device != current_input_device_id_ && info.inputChannels > 0)
         {
             assert(info.inputChannels > 0);
             current_input_device_id_ = device;

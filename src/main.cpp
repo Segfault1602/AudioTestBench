@@ -11,8 +11,10 @@
 #include <vector>
 
 #include "audio/audio.h"
+#include "audio/midi_manager.h"
 #include "audio/ring_buffer.h"
 #include "audio_gui.h"
+#include "midi_gui.h"
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -54,11 +56,11 @@ int main()
         true); // Second param install_callback=true will install GLFW callbacks and chain to existing ones.
     ImGui_ImplOpenGL3_Init();
 
-    bool show_demo_window = true;
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     std::unique_ptr<AudioManager> audio_manager = AudioManager::CreateAudioManager();
+    std::unique_ptr<MidiManager> midi_manager = MidiManager::CreateMidiManager();
     std::vector<float> audio_buffer;
 
     audio_manager->StartAudioStream();
@@ -89,16 +91,12 @@ int main()
             rms = std::sqrt(rms / read_size);
         }
 
-        if (show_demo_window)
-            ImGui::ShowDemoWindow(&show_demo_window);
-
         {
             static float f = 0.0f;
             static int counter = 0;
 
             ImGui::Begin("Audio Test Bench");
 
-            ImGui::Checkbox("Demo Window", &show_demo_window);
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
             ImGui::End();
         }
@@ -119,6 +117,12 @@ int main()
         }
 
         DrawAudioFileGui(audio_manager.get());
+
+        DrawSpectrogramPlot(audio_buffer.data(), read_size);
+
+        DrawMidiDeviceWindow(midi_manager.get());
+
+        DrawMidiKnobGrid();
 
         // Rendering
         ImGui::Render();

@@ -67,7 +67,7 @@ class RtAudioManagerImpl : public AudioManager
     sfdsp::OnePoleFilter input_level_filter_;
     std::atomic<float> input_level_ = 0.f;
 
-    RingBuffer audio_buffer_;
+    RingBuffer<float> audio_buffer_;
 
     std::unique_ptr<AudioFileManager> audio_file_manager_;
 };

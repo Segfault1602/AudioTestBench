@@ -3,6 +3,7 @@
 #include <memory>
 #include <atomic>
 
+template <typename T>
 class RingBuffer
 {
 public:
@@ -15,18 +16,18 @@ public:
     size_t GetReadAvailable() const;
     size_t GetWriteAvailable() const;
 
-    void Write(const float* data, size_t size);
-    void Read(float* data, size_t& size);
-    void Peek(float* data, size_t& size);
+    void Write(const T* data, size_t size);
+    void Read(T* data, size_t& size);
+    void Peek(T* data, size_t& size);
 
     void Reset();
 
 private:
-    size_t size_;
-    std::atomic<size_t> read_index_;
-    std::atomic<size_t> write_index_;
-    std::unique_ptr<float[]> buffer_;
-
-    size_t big_mask_;
-    size_t small_mask_;
+  size_t max_size_ = 0;
+  std::atomic<size_t> read_index_ = 0;
+  std::atomic<size_t> write_index_ = 0;
+  std::atomic_bool overflow_flag_ = false;
+  T* buffer_ = nullptr;
 };
+
+#include "ring_buffer.tpp"

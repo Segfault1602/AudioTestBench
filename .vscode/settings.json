@@ -1,5 +1,6 @@
 {
     "files.associations": {
+        "*.tpp": "cpp",
         "algorithm": "cpp",
         "cmath": "cpp",
         "atomic": "cpp",
@@ -81,6 +82,8 @@
         "stop_token": "cpp",
         "thread": "cpp",
         "variant": "cpp",
-        "filesystem": "cpp"
-    }
+        "filesystem": "cpp",
+        "cassert": "cpp"
+    },
+    "cmake.generator": "Ninja Multi-Config",
 }

@@ -74,19 +74,35 @@ FetchContent_Declare(
     GIT_TAG master
     )
 
-    FetchContent_GetProperties(imgui-filebrowser)
-    if (NOT imgui-filebrowser_POPULATED)
+FetchContent_GetProperties(imgui-filebrowser)
+if (NOT imgui-filebrowser_POPULATED)
     FetchContent_Populate(imgui-filebrowser)
     set(IMGUI_FILEBROWSER_INCLUDE_DIR ${imgui-filebrowser_SOURCE_DIR})
-    endif()
+endif()
+
+FetchContent_Declare(
+    imgui-knobs
+    GIT_REPOSITORY https://github.com/altschuler/imgui-knobs.git
+    GIT_TAG main
+)
+
+FetchContent_GetProperties(imgui-knobs)
+if (NOT imgui-knobs_POPULATED)
+    FetchContent_Populate(imgui-knobs)
+    set(IMGUI_KNOBS_INCLUDE_DIR ${imgui-knobs_SOURCE_DIR})
+    file(GLOB IMGUI_KNOBS_SOURCES ${imgui-knobs_SOURCE_DIR}/*.cpp)
+    add_library(imgui-knobs STATIC ${IMGUI_KNOBS_SOURCES})
+    target_include_directories(imgui-knobs PUBLIC ${IMGUI_KNOBS_INCLUDE_DIR} ${IMGUI_INCLUDE_DIR})
+endif()
 
 set(EXE_SOURCE
     main.cpp
     audio_gui.cpp
-    plotting_ringbuffer.cpp
+    jitterbuffer.cpp
+    midi_gui.cpp
     )
 
 add_executable(${PROJECT_NAME} ${EXE_SOURCE})
 
-target_link_libraries(${PROJECT_NAME} imgui implot ${OPENGL_LIBRARIES} glfw glad audiolib sndfile)
+target_link_libraries(${PROJECT_NAME} imgui implot imgui-knobs ${OPENGL_LIBRARIES} glfw glad audiolib sndfile)
 target_include_directories(${PROJECT_NAME} PUBLIC ${IMGUI_FILEBROWSER_INCLUDE_DIR})

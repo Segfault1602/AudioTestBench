@@ -18,6 +18,7 @@ class AudioManager
 {
   public:
     static std::unique_ptr<AudioManager> CreateAudioManager();
+
     AudioManager() = default;
     virtual ~AudioManager() = default;
 

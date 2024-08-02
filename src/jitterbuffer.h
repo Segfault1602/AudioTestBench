@@ -2,17 +2,19 @@
 
 #include <vector>
 
-class PlotRingBuffer
+class JitterBuffer
 {
   public:
-    PlotRingBuffer(size_t size = 32768);
-    ~PlotRingBuffer();
+    JitterBuffer(size_t size = 32768);
+    ~JitterBuffer();
 
     void Resize(size_t size);
 
     size_t GetSize() const;
 
     void Write(const float* data, size_t size);
+
+    void Peek(float* data, size_t size);
 
     constexpr const float* GetBuffer() const
     {

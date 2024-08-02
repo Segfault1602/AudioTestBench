@@ -9,12 +9,10 @@
 
 constexpr char audio_file[] = "C:\\source\\libdsp\\waves\\piano.wav";
 
-RingBuffer g_ring_buffer;
+RingBuffer<float> g_ring_buffer;
 
 SF_INFO input_info;
 SNDFILE* input_file;
-
-// PaUtilRingBuffer g_pa_ring_buffer;
 
 void producer_thread()
 {
@@ -42,17 +40,6 @@ void producer_thread()
 
         g_ring_buffer.Write(buffer.data(), read * input_info.channels);
 
-        // ring_buffer_size_t write_available = PaUtil_GetRingBufferWriteAvailable(&g_pa_ring_buffer);
-        // if (write_available < read)
-        // {
-        //     std::cout << "No space to write, dropping samples" << std::endl;
-        //     continue;
-        // }
-        // else
-        // {
-        //     // PaUtil_WriteRingBuffer(&g_pa_ring_buffer, buffer.data(), read);
-        // }
-
         std::this_thread::sleep_for(std::chrono::milliseconds(period_milliseconds));
     }
 
@@ -68,8 +55,7 @@ void consumer()
     SNDFILE* file = sf_open("out.wav", SFM_WRITE, &info);
 
     constexpr uint32_t block_size = 512;
-    const uint32_t period_seconds = 30; // 30 fps
-    const uint32_t period_milliseconds = 1000 / 30;
+    const uint32_t period_milliseconds = 1000 / 60;
 
     size_t total_size_read = 0;
 
@@ -151,12 +137,70 @@ void easy_test()
     sf_close(input_file);
 }
 
+bool compare_files()
+{
+    SF_INFO original_info;
+    SNDFILE* original_file = sf_open(audio_file, SFM_READ, &original_info);
+
+    SF_INFO out_info;
+    SNDFILE* out_file = sf_open("out.wav", SFM_READ, &out_info);
+
+    if (original_info.channels != out_info.channels)
+    {
+        std::cout << "Channels mismatch" << std::endl;
+        return false;
+    }
+
+    if (original_info.samplerate != out_info.samplerate)
+    {
+        std::cout << "Sample rate mismatch" << std::endl;
+        return false;
+    }
+
+    if (original_info.frames != out_info.frames)
+    {
+        std::cout << "Frames mismatch" << std::endl;
+        return false;
+    }
+
+    constexpr uint32_t block_size = 512;
+    std::vector<float> original_buffer(block_size * original_info.channels);
+    std::vector<float> out_buffer(block_size * out_info.channels);
+    for (;;)
+    {
+        const auto original_read = sf_readf_float(original_file, original_buffer.data(), block_size);
+        const auto out_read = sf_readf_float(out_file, out_buffer.data(), block_size);
+
+        if (original_read != out_read)
+        {
+            std::cout << "Read size mismatch" << std::endl;
+            return false;
+        }
+
+        if (original_read == 0)
+        {
+            break;
+        }
+
+        for (size_t i = 0; i < original_read; ++i)
+        {
+            if (original_buffer[i] != out_buffer[i])
+            {
+                std::cout << "Data mismatch" << std::endl;
+                return false;
+            }
+        }
+    }
+
+    sf_close(original_file);
+    sf_close(out_file);
+
+    return true;
+}
+
 int main()
 {
-    g_ring_buffer.Resize(32768);
-
-    float* data = new float[1024];
-    // PaUtil_InitializeRingBuffer(&g_pa_ring_buffer, sizeof(float), 1024, data);
+    g_ring_buffer.Resize(48000);
 
     input_file = sf_open(audio_file, SFM_READ, &input_info);
     std::cout << "Channels: " << input_info.channels << std::endl;
@@ -171,6 +215,9 @@ int main()
     consumer_thread.join();
     // easy_test();
     auto end = std::chrono::high_resolution_clock::now();
+
+    bool result = compare_files();
+    std::cout << "Test result: " << (result ? "PASSED" : "FAILED") << std::endl;
 
     std::chrono::duration<double> elapsed = end - start;
     std::cout << "Elapsed time: " << elapsed.count() << "s" << std::endl;

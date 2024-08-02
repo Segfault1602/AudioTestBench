@@ -10,7 +10,8 @@
 #include <sndfile.h>
 #include <vector>
 
-#include "plotting_ringbuffer.h"
+#include "audio/fft_utils.h"
+#include "jitterbuffer.h"
 
 void DrawAudioDeviceGui(AudioManager* audio_manager, float rms)
 {
@@ -137,9 +138,10 @@ void DrawAudioDeviceGui(AudioManager* audio_manager, float rms)
 void DrawWaveformPlot(const float* data, size_t size)
 {
     static bool init = false;
-    static PlotRingBuffer ring_buffer;
+    static JitterBuffer ring_buffer;
     const size_t sample_rate = 48000;
-    constexpr size_t buffer_size = 24000;
+    constexpr size_t buffer_size = sample_rate * 0.2f;
+    static float scratch_buffer[buffer_size];
 
     if (!init)
     {
@@ -150,6 +152,11 @@ void DrawWaveformPlot(const float* data, size_t size)
     ImGui::Begin("Scope");
     static bool freeze = false;
     ImGui::Checkbox("Freeze", &freeze);
+
+    if (!freeze && size > 0)
+    {
+        ring_buffer.Write(data, size);
+    }
 
     ImGui::SameLine();
     uint32_t zoom_level[] = {5, 10, 50, 100};
@@ -163,6 +170,7 @@ void DrawWaveformPlot(const float* data, size_t size)
             if (ImGui::Selectable(std::format("{} ms", zoom_level[i]).c_str(), is_selected))
             {
                 selected_zoom = i;
+                ring_buffer.Resize(sample_rate * zoom_level[i] / 1000);
             }
 
             if (is_selected)
@@ -171,38 +179,17 @@ void DrawWaveformPlot(const float* data, size_t size)
         ImGui::EndCombo();
     }
 
-    if (!freeze && size > 0)
-    {
-        if (ring_buffer.GetSize() < size)
-        {
-            // Just copy the latest data
-            size_t offset = size - ring_buffer.GetSize();
-            ring_buffer.Write(data + offset, ring_buffer.GetSize());
-        }
-        else
-        {
-            ring_buffer.Write(data, size);
-        }
-    }
-
     if (ImPlot::BeginPlot("##Scope", ImVec2(-1, -1)))
     {
         size_t zoom_samples = sample_rate * zoom_level[selected_zoom] / 1000;
-        zoom_samples = min(zoom_samples, ring_buffer.GetSize());
+        zoom_samples = min(zoom_samples, buffer_size);
 
-        ImPlot::SetupAxes("Time", "Signal");
+        ring_buffer.Peek(scratch_buffer, zoom_samples);
+
+        ImPlot::SetupAxes("Time", "Signal", ImPlotAxisFlags_NoTickLabels, 0);
         ImPlot::SetupAxisLimits(ImAxis_X1, 0, zoom_samples, ImGuiCond_Always);
         ImPlot::SetupAxisLimits(ImAxis_Y1, -1, 1);
-        ImPlot::PlotLine("wave",
-                         ring_buffer.GetBuffer(), // value
-                         ring_buffer.GetSize(),   // count
-                         1,                       // xscale
-                         0,                       // xstart
-                         ImPlotLineFlags_None,    // flags
-                         ring_buffer.GetOffset(), // offset
-                         sizeof(float)            // stride
-        );
-
+        ImPlot::PlotLine("wave", ring_buffer.GetBuffer(), zoom_samples);
         ImPlot::EndPlot();
     }
 
@@ -240,6 +227,110 @@ void DrawAudioFileGui(AudioManager* audio_manager)
         std::cout << "Selected file: " << audio_file << std::endl;
         file_dialog.ClearSelected();
         audio_manager->GetAudioFileManager()->OpenAudioFile(audio_file);
+    }
+
+    ImGui::End();
+}
+
+void DrawSpectrogramPlot(const float* data, size_t size)
+{
+    constexpr size_t kSize = 2048;
+    static JitterBuffer jitterbuffer;
+    static float fft_buffer[kSize];
+    static float window[kSize];
+    static float buffer[kSize];
+    static float freq[kSize];
+
+    static bool init = false;
+    if (!init)
+    {
+        init = true;
+        GetWindow(FFTWindowType::Rectangular, window, kSize);
+        jitterbuffer.Resize(kSize * 2);
+
+        for (size_t i = 0; i < kSize; i++)
+        {
+            freq[i] = i * (48000.0f / 2.f) / kSize;
+        }
+    }
+
+    ImGui::Begin("Spectrogram");
+    static bool freeze = false;
+    ImGui::Checkbox("Freeze", &freeze);
+
+    ImGui::SameLine();
+    std::string win_type[] = {"Rectangular", "Hamming", "Hann", "Blackman"};
+    static int selected_win = 0;
+    bool window_changed = false;
+    if (ImGui::BeginCombo("Window", win_type[selected_win].c_str(), ImGuiComboFlags_WidthFitPreview))
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            bool is_selected = (selected_win == i);
+            if (ImGui::Selectable(win_type[i].c_str(), is_selected))
+            {
+                selected_win = i;
+                GetWindow(static_cast<FFTWindowType>(i), window, kSize);
+                window_changed = true;
+            }
+
+            if (is_selected)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+
+    if (!freeze || window_changed)
+    {
+        jitterbuffer.Write(data, size);
+
+        jitterbuffer.Peek(buffer, kSize);
+
+        for (size_t i = 0; i < kSize; i++)
+        {
+            buffer[i] = buffer[i] * window[i];
+        }
+        fft(buffer, fft_buffer, kSize);
+        for (size_t i = 0; i < kSize; i++)
+        {
+            fft_buffer[i] = 20 * log10(std::abs(fft_buffer[i]));
+        }
+    }
+
+    if (ImPlot::BeginPlot("##Spectrogram"))
+    {
+        ImPlot::SetupAxes("Freq", "Db");
+        ImPlot::SetupAxisLimits(ImAxis_X1, 0, 24000, ImGuiCond_Always);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, -100, 50);
+        ImPlot::PlotLine("Spectrum", freq, fft_buffer, kSize);
+
+        ImPlot::EndPlot();
+    }
+
+    if (ImPlot::BeginPlot("##Wave"))
+    {
+        ImPlot::SetupAxes("time", "amplitude");
+        ImPlot::SetupAxisLimits(ImAxis_Y1, -1, 1);
+        ImPlot::PlotLine("wave", buffer, kSize);
+
+        ImPlot::EndPlot();
+    }
+
+    if (ImPlot::BeginPlot("##Window"))
+    {
+        ImPlot::SetupAxes("time", "amplitude");
+        ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
+        ImPlot::PlotLine("wave",
+                         window,               // value
+                         kSize,                // count
+                         1,                    // xscale
+                         0,                    // xstart
+                         ImPlotLineFlags_None, // flags
+                         0,                    // offset
+                         sizeof(float)         // stride
+        );
+
+        ImPlot::EndPlot();
     }
 
     ImGui::End();
